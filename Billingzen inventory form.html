@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BillingZen Inventory Form</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f6f6f4;--bg3:#eeede9;
+  --text:#1a1a1a;--text2:#555;--text3:#999;
+  --border:rgba(0,0,0,0.11);--border2:rgba(0,0,0,0.2);
+  --accent:#1a1a1a;--accent-fg:#fff;
+  --blue-bg:#e8f0fe;--blue:#1a56db;
+  --green-bg:#dcfce7;--green:#166534;
+  --yellow-bg:#fef9c3;--yellow:#854d0e;
+  --red-bg:#fee2e2;--red:#991b1b;
+  --r:8px;--rl:12px;
+  --font:'Segoe UI',system-ui,-apple-system,sans-serif;
+  --mono:'Courier New',monospace;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
+  --text:#f2f2f7;--text2:#aeaeb2;--text3:#636366;
+  --border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.2);
+  --accent:#f2f2f7;--accent-fg:#1c1c1e;
+  --blue-bg:#1e3a5f;--blue:#93c5fd;
+  --green-bg:#14532d;--green:#86efac;
+  --yellow-bg:#451a03;--yellow:#fcd34d;
+  --red-bg:#450a0a;--red:#fca5a5;
+}}
+body{font-family:var(--font);background:var(--bg3);color:var(--text);font-size:15px;min-height:100vh}
+.wrap{max-width:860px;margin:0 auto;padding:1.5rem 1rem 5rem}
+
+/* Header */
+.hdr{display:flex;align-items:center;gap:14px;margin-bottom:1.75rem}
+.hdr-logo{width:42px;height:42px;background:var(--blue-bg);border-radius:var(--r);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hdr-logo svg{width:22px;height:22px;color:var(--blue)}
+.hdr h1{font-size:20px;font-weight:600}
+.hdr h1 em{font-style:normal;font-weight:400;color:var(--text2);font-size:15px;margin-left:6px}
+
+/* Tabs */
+.tabs{display:flex;background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r);padding:3px;gap:2px;margin-bottom:1.5rem;width:fit-content}
+.tab{padding:6px 20px;font-size:13px;font-weight:500;color:var(--text2);background:transparent;border:none;cursor:pointer;border-radius:6px;transition:all .15s;font-family:var(--font)}
+.tab.on{background:var(--bg);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.1)}
+.tab:hover:not(.on){color:var(--text)}
+
+/* Card */
+.card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--rl);padding:1.25rem 1.4rem;margin-bottom:1rem}
+.slabel{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:1rem}
+
+/* Grids */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.full{grid-column:1/-1}
+@media(max-width:600px){.g2,.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){.g2,.g3{grid-template-columns:1fr}}
+
+/* Fields */
+.f{display:flex;flex-direction:column;gap:5px}
+.f label{font-size:12px;font-weight:500;color:var(--text2)}
+.f input,.f select{font-size:14px;padding:8px 11px;border:0.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);font-family:var(--font);transition:border-color .15s;width:100%}
+.f input:focus,.f select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,86,219,0.1)}
+.f input::placeholder{color:var(--text3)}
+.f select option{background:var(--bg)}
+.req{color:var(--red)}
+
+/* Buttons */
+.btn{padding:8px 14px;font-size:13px;font-weight:500;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg);color:var(--text);cursor:pointer;font-family:var(--font);white-space:nowrap;display:inline-flex;align-items:center;gap:6px;transition:all .15s}
+.btn:hover{background:var(--bg2)}
+.btn:active{transform:scale(.98)}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.pri:hover{opacity:.85}
+.btn.blue{color:var(--blue);border-color:var(--blue)}
+.btn.blue:hover{background:var(--blue-bg)}
+.btn.green{color:var(--green);border-color:var(--green)}
+.btn.green:hover{background:var(--green-bg)}
+.btn.red{color:var(--red);border-color:var(--red)}
+.btn.red:hover{background:var(--red-bg)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Row */
+.row{display:flex;gap:8px;align-items:flex-end}
+.row .f{flex:1;min-width:0}
+
+/* Barcode display box */
+.bc-box{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r);padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.bc-val{font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:.12em;color:var(--text);flex:1;min-width:140px}
+.bc-val.empty{font-size:13px;font-weight:400;color:var(--text3);letter-spacing:0;font-family:var(--font)}
+.bc-img{margin-top:10px;text-align:center;display:none}
+.bc-img svg{max-width:280px;width:100%}
+
+/* Badge */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:500}
+.badge.blue{background:var(--blue-bg);color:var(--blue)}
+.badge.green{background:var(--green-bg);color:var(--green)}
+.badge.yellow{background:var(--yellow-bg);color:var(--yellow)}
+
+/* Img thumb */
+.img-thumb{width:46px;height:46px;border-radius:var(--r);object-fit:cover;border:0.5px solid var(--border);flex-shrink:0}
+.img-empty{width:46px;height:46px;border-radius:var(--r);border:0.5px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+hr{border:none;border-top:0.5px solid var(--border);margin:1rem 0}
+
+/* Items table */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:580px}
+thead th{text-align:left;padding:10px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:0.5px solid var(--border);background:var(--bg2)}
+tbody td{padding:10px 12px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--bg2)}
+.mpill{font-family:var(--mono);font-size:11px;background:var(--bg3);padding:2px 7px;border-radius:4px;color:var(--text2)}
+
+.arow{display:flex;justify-content:space-between;align-items:center;margin-top:1rem;gap:10px}
+.empty-st{text-align:center;padding:3rem 1rem;color:var(--text3)}
+.empty-st svg{width:38px;height:38px;margin:0 auto 10px;opacity:.35;display:block}
+
+/* ═══ MODAL ═══ */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg);border-radius:var(--rl);width:100%;max-width:480px;border:0.5px solid var(--border);overflow:hidden}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border)}
+.modal-hdr h2{font-size:15px;font-weight:600}
+.modal-body{padding:1.25rem}
+.xbtn{background:none;border:none;cursor:pointer;color:var(--text2);padding:4px;border-radius:6px;display:flex}
+.xbtn:hover{background:var(--bg2)}
+
+/* Scanner */
+.scan-area{border:1.5px dashed var(--border2);border-radius:var(--r);background:var(--bg2);overflow:hidden;position:relative}
+.scan-ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:2.5rem 1rem}
+.scan-corners{width:56px;height:56px;position:relative}
+.scan-corners::before,.scan-corners::after,.scan-corners span::before,.scan-corners span::after{content:'';position:absolute;width:14px;height:14px;border-color:var(--border2);border-style:solid}
+.scan-corners::before{top:0;left:0;border-width:2px 0 0 2px}
+.scan-corners::after{bottom:0;right:0;border-width:0 2px 2px 0}
+.scan-corners span::before{top:0;right:0;border-width:2px 2px 0 0}
+.scan-corners span::after{bottom:0;left:0;border-width:0 0 2px 2px}
+#scan-video{width:100%;max-height:260px;display:none;object-fit:cover}
+#scan-video.on{display:block}
+.scan-ov{position:absolute;inset:0;pointer-events:none;display:none;align-items:center;justify-content:center}
+.scan-ov.on{display:flex}
+.scan-line{width:70%;height:2px;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:sline 1.8s ease-in-out infinite}
+@keyframes sline{0%,100%{transform:translateY(-70px)}50%{transform:translateY(70px)}}
+
+/* Notice */
+.notice{border-radius:var(--r);padding:11px 13px;font-size:13px;display:flex;gap:10px;align-items:flex-start;line-height:1.5}
+.notice.yellow{background:var(--yellow-bg);color:var(--yellow);border:0.5px solid var(--yellow)}
+.notice svg{flex-shrink:0;margin-top:1px}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--accent);color:var(--accent-fg);padding:9px 20px;border-radius:20px;font-size:13px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.15);transition:transform .25s;z-index:200;white-space:nowrap}
+#toast.on{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="hdr-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M7 7h2v10H7zM11 7h1v10h-1zM14 7h1v10h-1zM17 7h1v5h-1z"/>
+      </svg>
+    </div>
+    <h1>BillingZen Inventory <em>— item entry</em></h1>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" onclick="switchTab('form')">Add item</button>
+    <button class="tab" onclick="switchTab('items')">Items (<span id="item-count">0</span>)</button>
+  </div>
+
+  <!-- ════ TAB: ADD ITEM ════ -->
+  <div id="tab-form">
+
+    <div class="card">
+      <p class="slabel">Barcode (EAN-13)</p>
+
+      <!-- Live barcode value + action buttons -->
+      <div class="bc-box">
+        <div class="bc-val empty" id="bc-val">No barcode set</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn blue" onclick="generateEAN13()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="2" height="16"/><rect x="7" y="4" width="1" height="16"/>
+              <rect x="10" y="4" width="3" height="16"/><rect x="15" y="4" width="1" height="16"/>
+              <rect x="18" y="4" width="2" height="16"/>
+            </svg>
+            Generate EAN-13
+          </button>
+          <button class="btn" onclick="openScanModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+              <line x1="7" y1="12" x2="17" y2="12"/>
+            </svg>
+            Scan barcode
+          </button>
+        </div>
+      </div>
+
+      <!-- Rendered barcode image -->
+      <div class="bc-img" id="bc-img"><svg id="bc-svg"></svg></div>
+
+      <!-- Manual input -->
+      <div style="margin-top:12px;">
+        <div class="row">
+          <div class="f">
+            <label>Or enter barcode manually</label>
+            <input type="text" id="f-barcode" placeholder="e.g. 8906080600616" inputmode="numeric" autocomplete="off" oninput="onBCInput(this.value)"/>
+          </div>
+          <button class="btn blue" onclick="lookupBarcode()" id="lookup-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Look up
+          </button>
+        </div>
+        <div id="lookup-st" style="margin-top:8px;display:none;"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="slabel">Product details</p>
+      <div class="g2">
+        <div class="f full">
+          <label>Product name <span class="req">*</span></label>
+          <input type="text" id="f-name" placeholder="e.g. Alphonso Mango"/>
+        </div>
+        <div class="f">
+          <label>Stock unit</label>
+          <select id="f-unit">
+            <option value="piece">piece</option><option value="kg">kg</option>
+            <option value="litre">litre</option><option value="box">box</option>
+            <option value="pack">pack</option><option value="set">set</option>
+            <option value="dozen">dozen</option><option value="metre">metre</option>
+          </select>
+        </div>
+        <div class="f">
+          <label>Price unit qty</label>
+          <input type="number" id="f-puqty" value="1" min="1" step="1"/>
+        </div>
+        <div class="f full">
+          <label>Image URL</label>
+          <div class="row" style="align-items:center;">
+            <input type="url" id="f-image" placeholder="https://..." style="flex:1" oninput="prevImg(this.value)"/>
+            <div id="img-wrap">
+              <div class="img-empty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text3)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="slabel">Pricing</p>
+      <div class="g3">
+        <div class="f"><label>Sale price <span class="req">*</span></label><input type="number" id="f-sale" placeholder="0.00" step="0.01" min="0"/></div>
+        <div class="f"><label>Discount price</label><input type="number" id="f-disc" placeholder="0.00" step="0.01" min="0"/></div>
+        <div class="f"><label>Cost price</label><input type="number" id="f-cost" placeholder="0.00" step="0.01" min="0"/></div>
+        <div class="f"><label>Tax label</label><input type="text" id="f-taxlabel" placeholder="Standard"/></div>
+        <div class="f"><label>Tax rate (0.1 = 10%)</label><input type="number" id="f-taxrate" placeholder="0.1" step="0.01" min="0" max="1"/></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="slabel">Stock &amp; supplier</p>
+      <div class="g3">
+        <div class="f"><label>Stock qty</label><input type="number" id="f-qty" value="0" step="1" min="0"/></div>
+        <div class="f"><label>Low stock threshold</label><input type="number" id="f-lowstock" value="5" step="1" min="0"/></div>
+        <div class="f"><label>Supplier contact ID</label><input type="text" id="f-supplier" placeholder="supplier_abc123"/></div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;margin-top:.25rem;">
+      <button class="btn red" onclick="clearForm()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        Clear
+      </button>
+      <button class="btn pri" onclick="addItem()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add to list
+      </button>
+    </div>
+  </div>
+
+  <!-- ════ TAB: ITEMS ════ -->
+  <div id="tab-items" style="display:none">
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div id="empty-st" class="empty-st">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/><rect x="1" y="7" width="22" height="14" rx="2"/><path d="M8 12h8M8 16h5"/></svg>
+        <p style="font-size:14px;margin-top:4px;">No items yet</p>
+        <p style="font-size:13px;margin-top:3px;">Use "Add item" to get started</p>
+      </div>
+      <div class="tbl-wrap" id="tbl-wrap" style="display:none;">
+        <table>
+          <thead><tr><th></th><th>Barcode</th><th>Name</th><th>Unit</th><th>Sale</th><th>Discount</th><th>Cost</th><th>Stock</th><th>Tax</th><th></th></tr></thead>
+          <tbody id="items-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="arow">
+      <span style="font-size:13px;color:var(--text3);" id="items-lbl">0 items</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn red" id="btn-clr" onclick="clearAll()" style="display:none">Clear all</button>
+        <button class="btn green" id="btn-exp" onclick="exportCSV()" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════ SCAN MODAL ════ -->
+<div class="modal-bg" id="scan-modal" onclick="bdClick(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h2>Scan barcode</h2>
+      <button class="xbtn" onclick="closeModal()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="notice yellow" id="file-notice" style="display:none;margin-bottom:12px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div><strong>Camera needs HTTPS.</strong> You're on <code>file://</code> — browsers block camera locally.<br/>
+        Fix: <code>npx serve .</code> or <code>python3 -m http.server 8080</code>, then open <code>http://localhost:8080</code></div>
+      </div>
+
+      <div class="scan-area">
+        <video id="scan-video" playsinline></video>
+        <div class="scan-ov" id="scan-ov"><div class="scan-line"></div></div>
+        <div class="scan-ph" id="scan-ph">
+          <div class="scan-corners"><span></span></div>
+          <p style="font-size:14px;font-weight:500;color:var(--text2);">Point camera at a barcode</p>
+          <p style="font-size:12px;color:var(--text3);">Requires HTTPS + camera permission</p>
+          <button class="btn pri" onclick="startScanner()" style="margin-top:6px;">Start camera</button>
+        </div>
+      </div>
+
+      <div id="scan-result" style="display:none;margin-top:14px;">
+        <div class="badge green" style="margin-bottom:10px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Barcode detected
+        </div>
+        <p style="font-size:14px;color:var(--text2);margin-bottom:12px;">Code: <code id="scan-code" style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);"></code></p>
+        <div style="display:flex;gap:8px;">
+          <button class="btn pri" onclick="useScanned()">Use this code</button>
+          <button class="btn" onclick="restartScan()">Scan again</button>
+        </div>
+      </div>
+
+      <hr/>
+      <p style="font-size:13px;font-weight:500;color:var(--text2);margin-bottom:8px;">Type barcode manually</p>
+      <div class="row">
+        <div class="f"><input type="text" id="manual-bc" placeholder="Type or paste barcode" inputmode="numeric"/></div>
+        <button class="btn pri" onclick="useManual()">Use &amp; look up</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const gv=id=>$(id).value.trim();
+const sv=(id,v)=>{$(id).value=v!=null?v:''};
+let items=[],scannedCode='',codeReader=null,scanning=false;
+
+function switchTab(t){
+  $('tab-form').style.display=t==='form'?'':'none';
+  $('tab-items').style.display=t==='items'?'':'none';
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('on',['form','items'][i]===t));
+}
+
+// ── EAN-13 ──────────────────────────────
+function generateEAN13(){
+  const rand=n=>Math.floor(Math.random()*n);
+  let d=Array.from({length:12},()=>rand(10));
+  let sum=d.reduce((a,v,i)=>a+v*(i%2===0?1:3),0);
+  d.push((10-(sum%10))%10);
+  const val=d.join('');
+  sv('f-barcode',val);
+  updateBC(val);
+  toast('EAN-13 generated ✓');
+}
+
+function updateBC(val){
+  const lbl=$('bc-val'),img=$('bc-img');
+  if(!val){lbl.textContent='No barcode set';lbl.className='bc-val empty';img.style.display='none';return;}
+  lbl.textContent=val;lbl.className='bc-val';
+  try{
+    const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+    JsBarcode('#bc-svg',val,{format:'auto',width:2,height:65,displayValue:false,background:'transparent',lineColor:dark?'#f2f2f7':'#1a1a1a',margin:6});
+    img.style.display='block';
+  }catch{img.style.display='none';}
+}
+
+function onBCInput(val){updateBC(val);}
+
+// ── Lookup ──────────────────────────────
+async function lookupBarcode(){
+  const code=gv('f-barcode');if(!code){toast('Enter a barcode first');return;}
+  const btn=$('lookup-btn'),st=$('lookup-st');
+  btn.disabled=true;
+  btn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><polyline points="23 4 23 10 17 10"/><path d="M20.5 16a9 9 0 1 1-.5-5"/></svg> Searching…`;
+  if(!document.getElementById('_sp')){const s=document.createElement('style');s.id='_sp';s.textContent='@keyframes spin{to{transform:rotate(360deg)}}';document.head.appendChild(s);}
+  st.style.display='block';st.innerHTML=`<span class="badge blue">Searching Open Food Facts…</span>`;
+  try{
+    const r=await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+    const d=await r.json();
+    if(d.status===1&&d.product){
+      const p=d.product;
+      prefill({name:p.product_name||p.product_name_en||'',image_url:p.image_url||p.image_front_url||'',stock_unit:'piece',price_unit_qty:1,tax_rate:0});
+      st.innerHTML=`<span class="badge green"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Found — review &amp; fill missing fields</span>`;
+    }else{st.innerHTML=`<span class="badge yellow">Not found — fill manually</span>`;}
+  }catch{st.innerHTML=`<span class="badge yellow">Network error — fill manually</span>`;}
+  btn.disabled=false;
+  btn.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Look up`;
+}
+
+function prefill(data){
+  if(data.barcode!==undefined){sv('f-barcode',data.barcode);updateBC(data.barcode);}
+  if(data.name)sv('f-name',data.name);
+  if(data.stock_unit)$('f-unit').value=data.stock_unit;
+  if(data.price_unit_qty)sv('f-puqty',data.price_unit_qty);
+  if(data.sale_price)sv('f-sale',data.sale_price);
+  if(data.discount_price)sv('f-disc',data.discount_price);
+  if(data.cost_price)sv('f-cost',data.cost_price);
+  if(data.stock_qty!==undefined)sv('f-qty',data.stock_qty);
+  if(data.low_stock_threshold)sv('f-lowstock',data.low_stock_threshold);
+  if(data.supplier_contact_ids)sv('f-supplier',data.supplier_contact_ids);
+  if(data.tax_label)sv('f-taxlabel',data.tax_label);
+  if(data.tax_rate!==undefined)sv('f-taxrate',data.tax_rate);
+  if(data.image_url){sv('f-image',data.image_url);prevImg(data.image_url);}
+}
+
+function clearForm(){
+  ['f-barcode','f-name','f-image','f-sale','f-disc','f-cost','f-taxlabel','f-supplier'].forEach(id=>sv(id,''));
+  sv('f-puqty','1');sv('f-qty','0');sv('f-lowstock','5');sv('f-taxrate','');
+  $('f-unit').value='piece';$('lookup-st').style.display='none';updateBC('');
+  $('img-wrap').innerHTML=`<div class="img-empty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text3)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`;
+}
+
+function prevImg(url){
+  $('img-wrap').innerHTML=url
+    ?`<img class="img-thumb" src="${url}" onerror="this.outerHTML='<div class=img-empty style=border-color:var(--red)>✕</div>'"/>`
+    :`<div class="img-empty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text3)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`;
+}
+
+// ── Add / remove ────────────────────────
+function addItem(){
+  if(!gv('f-name')){toast('Product name is required');$('f-name').focus();return;}
+  if(!gv('f-sale')){toast('Sale price is required');$('f-sale').focus();return;}
+  items.push({barcode:gv('f-barcode'),name:gv('f-name'),stock_unit:$('f-unit').value,
+    price_unit_qty:gv('f-puqty')||'1',sale_price:gv('f-sale'),discount_price:gv('f-disc'),
+    cost_price:gv('f-cost'),stock_qty:gv('f-qty')||'0',low_stock_threshold:gv('f-lowstock')||'5',
+    supplier_contact_ids:gv('f-supplier'),tax_label:gv('f-taxlabel'),tax_rate:gv('f-taxrate')||'0',image_url:gv('f-image')});
+  refreshTable();clearForm();toast('Item added ✓');switchTab('items');
+}
+
+function removeItem(i){items.splice(i,1);refreshTable();toast('Removed');}
+function clearAll(){if(confirm(`Remove all ${items.length} items?`)){items=[];refreshTable();toast('Cleared');}}
+
+function refreshTable(){
+  const n=items.length;
+  $('item-count').textContent=n;$('items-lbl').textContent=n+(n===1?' item':' items');
+  $('empty-st').style.display=n?'none':'';$('tbl-wrap').style.display=n?'':'none';
+  $('btn-exp').style.display=n?'':'none';$('btn-clr').style.display=n?'':'none';
+  $('items-tbody').innerHTML=items.map((it,i)=>`<tr>
+    <td>${it.image_url?`<img style="width:34px;height:34px;border-radius:6px;object-fit:cover;border:0.5px solid var(--border)" src="${it.image_url}" onerror="this.style.display='none'"/>`:'<div style="width:34px;height:34px;border-radius:6px;background:var(--bg2);border:0.5px solid var(--border)"></div>'}</td>
+    <td><span class="mpill">${it.barcode||'—'}</span></td>
+    <td style="font-weight:500;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${it.name}">${it.name}</td>
+    <td>${it.stock_unit}</td><td>$${parseFloat(it.sale_price||0).toFixed(2)}</td>
+    <td>${it.discount_price?'$'+parseFloat(it.discount_price).toFixed(2):'—'}</td>
+    <td>${it.cost_price?'$'+parseFloat(it.cost_price).toFixed(2):'—'}</td>
+    <td>${it.stock_qty}</td>
+    <td style="font-size:12px;">${it.tax_label||''}${it.tax_rate?' '+Math.round(parseFloat(it.tax_rate)*100)+'%':''}</td>
+    <td><button class="btn red" onclick="removeItem(${i})" style="padding:5px 9px;font-size:12px;">Remove</button></td>
+  </tr>`).join('');
+}
+
+function exportCSV(){
+  const now=new Date().toISOString();
+  const cols=['barcode','name','stock_unit','price_unit_qty','sale_price','discount_price','cost_price','stock_qty','low_stock_threshold','supplier_contact_ids','tax_label','tax_rate','image_url'];
+  const csv=`# Exported by BillingZen (P2Devs)\n# Inventory CSV\n# Export date: ${now}\n`+cols.join(',')+'\n'+items.map(it=>cols.map(c=>it[c]??'').join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`billingzen_inventory_${now.slice(0,10)}.csv`;a.click();
+  toast(`Exported ${items.length} items ✓`);
+}
+
+// ── Modal ───────────────────────────────
+function openScanModal(){
+  $('scan-modal').classList.add('open');
+  $('file-notice').style.display=location.protocol==='file:'?'':'none';
+}
+function closeModal(){$('scan-modal').classList.remove('open');stopScanner();}
+function bdClick(e){if(e.target===$('scan-modal'))closeModal();}
+
+async function startScanner(){
+  if(location.protocol==='file:'){$('file-notice').style.display='';return;}
+  $('scan-ph').style.display='none';$('scan-video').classList.add('on');$('scan-ov').classList.add('on');
+  try{
+    codeReader=new ZXingBrowser.BrowserMultiFormatReader();scanning=true;
+    await codeReader.decodeFromVideoDevice(null,$('scan-video'),result=>{
+      if(result){scannedCode=result.getText();stopScanner();$('scan-code').textContent=scannedCode;$('scan-result').style.display='block';}
+    });
+  }catch(e){
+    stopScanner();$('scan-ph').style.display='';
+    $('scan-ph').innerHTML=`<div class="notice yellow" style="text-align:left;width:100%;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><strong>${e.message.includes('ermission')?'Permission denied.':'Camera unavailable.'}</strong><br/><button class="btn pri" onclick="resetPH()" style="margin-top:8px;">Try again</button></div></div>`;
+  }
+}
+
+function stopScanner(){
+  scanning=false;if(codeReader){try{codeReader.reset();}catch(e){}codeReader=null;}
+  $('scan-video').classList.remove('on');$('scan-ov').classList.remove('on');
+}
+
+function resetPH(){
+  $('scan-ph').innerHTML=`<div class="scan-corners"><span></span></div><p style="font-size:14px;font-weight:500;color:var(--text2);">Point camera at a barcode</p><p style="font-size:12px;color:var(--text3);">Requires HTTPS + camera permission</p><button class="btn pri" onclick="startScanner()" style="margin-top:6px;">Start camera</button>`;
+  $('scan-ph').style.display='';$('scan-result').style.display='none';
+}
+
+function restartScan(){$('scan-result').style.display='none';scannedCode='';resetPH();}
+
+function useScanned(){
+  sv('f-barcode',scannedCode);updateBC(scannedCode);closeModal();setTimeout(lookupBarcode,150);
+}
+
+function useManual(){
+  const val=$('manual-bc').value.trim();if(!val){toast('Enter a barcode');return;}
+  sv('f-barcode',val);$('manual-bc').value='';updateBC(val);closeModal();setTimeout(lookupBarcode,150);
+}
+
+// ── Toast ───────────────────────────────
+function toast(msg,ms=2400){const t=$('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),ms);}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&document.activeElement===$('f-barcode'))lookupBarcode();
+  if(e.key==='Enter'&&document.activeElement===$('manual-bc'))useManual();
+  if(e.key==='Escape')closeModal();
+});
+</script>
+</body>
+</html>
