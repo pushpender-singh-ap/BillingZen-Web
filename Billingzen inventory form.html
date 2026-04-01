@@ -323,12 +323,12 @@ tbody tr:hover td{background:var(--bg2)}
     <div class="modal-body">
       <div class="notice yellow" id="file-notice" style="display:none;margin-bottom:12px;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <div><strong>Camera needs HTTPS.</strong> You're on <code>file://</code> — browsers block camera locally.<br/>
-        Fix: <code>npx serve .</code> or <code>python3 -m http.server 8080</code>, then open <code>http://localhost:8080</code></div>
+        <div><strong>Camera needs a secure context.</strong> Browsers allow camera only on <code>https://</code> or <code>http://localhost</code>.<br/>
+        If this page is opened as <code>file://</code>, start a local server with <code>npx serve .</code> or <code>python3 -m http.server 8080</code>, then open <code>http://localhost:8080</code></div>
       </div>
 
       <div class="scan-area">
-        <video id="scan-video" playsinline></video>
+        <video id="scan-video" playsinline autoplay muted></video>
         <div class="scan-ov" id="scan-ov"><div class="scan-line"></div></div>
         <div class="scan-ph" id="scan-ph">
           <div class="scan-corners"><span></span></div>
@@ -493,13 +493,26 @@ function exportCSV(){
 // ── Modal ───────────────────────────────
 function openScanModal(){
   $('scan-modal').classList.add('open');
-  $('file-notice').style.display=location.protocol==='file:'?'':'none';
+  scannedCode='';
+  $('scan-result').style.display='none';
+  resetPH();
+  if(!window.isSecureContext||location.protocol==='file:'||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    $('file-notice').style.display='';
+    return;
+  }
+  $('file-notice').style.display='none';
+  startScanner();
 }
 function closeModal(){$('scan-modal').classList.remove('open');stopScanner();}
 function bdClick(e){if(e.target===$('scan-modal'))closeModal();}
 
 async function startScanner(){
-  if(location.protocol==='file:'){$('file-notice').style.display='';return;}
+  if(scanning)return;
+  if(!window.isSecureContext||location.protocol==='file:'||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    $('file-notice').style.display='';
+    return;
+  }
+  $('file-notice').style.display='none';
   $('scan-ph').style.display='none';$('scan-video').classList.add('on');$('scan-ov').classList.add('on');
   try{
     codeReader=new ZXingBrowser.BrowserMultiFormatReader();scanning=true;
@@ -508,7 +521,7 @@ async function startScanner(){
     });
   }catch(e){
     stopScanner();$('scan-ph').style.display='';
-    $('scan-ph').innerHTML=`<div class="notice yellow" style="text-align:left;width:100%;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><strong>${e.message.includes('ermission')?'Permission denied.':'Camera unavailable.'}</strong><br/><button class="btn pri" onclick="resetPH()" style="margin-top:8px;">Try again</button></div></div>`;
+    $('scan-ph').innerHTML=`<div class="notice yellow" style="text-align:left;width:100%;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><strong>${(e&&((e.name&&e.name.includes('NotAllowed'))||(e.message&&e.message.toLowerCase().includes('permission'))))?'Permission denied.':'Camera unavailable.'}</strong><br/><button class="btn pri" onclick="resetPH()" style="margin-top:8px;">Try again</button></div></div>`;
   }
 }
 
