@@ -366,7 +366,7 @@ tbody tr:hover td{background:var(--bg2)}
 const $=id=>document.getElementById(id);
 const gv=id=>$(id).value.trim();
 const sv=(id,v)=>{$(id).value=v!=null?v:''};
-let items=[],scannedCode='',codeReader=null,scanning=false;
+let items=[],scannedCode='',codeReader=null,scanning=false,scanStream=null;
 
 function switchTab(t){
   $('tab-form').style.display=t==='form'?'':'none';
@@ -506,6 +506,18 @@ function openScanModal(){
 function closeModal(){$('scan-modal').classList.remove('open');stopScanner();}
 function bdClick(e){if(e.target===$('scan-modal'))closeModal();}
 
+function scanErrMsg(e){
+  const n=(e&&e.name?e.name:'').toLowerCase();
+  if(n.includes('scannerlibraryerror'))return 'Scanner library failed to load. Refresh the page and try again.';
+  if(n.includes('notallowed')||n.includes('permissiondenied'))return 'Permission denied. Allow camera access in browser settings and try again.';
+  if(n.includes('notfound')||n.includes('devicesnotfound'))return 'No camera was found on this device.';
+  if(n.includes('notreadable')||n.includes('trackstart'))return 'Camera is busy in another app or browser tab.';
+  if(n.includes('overconstrained')||n.includes('constraintnotsatisfied'))return 'Camera mode not supported. Try again.';
+  if(n.includes('security'))return 'Camera is blocked because this page is not in a secure context.';
+  const tag=e&&e.name?` (${e.name})`:'';
+  return `Camera unavailable${tag}. Check browser/site camera settings and close other apps using the camera.`;
+}
+
 async function startScanner(){
   if(scanning)return;
   if(!window.isSecureContext||location.protocol==='file:'||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
@@ -513,21 +525,55 @@ async function startScanner(){
     return;
   }
   $('file-notice').style.display='none';
-  $('scan-ph').style.display='none';$('scan-video').classList.add('on');$('scan-ov').classList.add('on');
+  const videoEl=$('scan-video');
+  $('scan-ph').style.display='none';videoEl.classList.add('on');$('scan-ov').classList.add('on');
   try{
-    codeReader=new ZXingBrowser.BrowserMultiFormatReader();scanning=true;
-    await codeReader.decodeFromVideoDevice(null,$('scan-video'),result=>{
+    // Request camera directly first so permission prompt behavior is consistent.
+    scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    videoEl.srcObject=scanStream;
+    await videoEl.play();
+    scanning=true;
+
+    const onResult=result=>{
       if(result){scannedCode=result.getText();stopScanner();$('scan-code').textContent=scannedCode;$('scan-result').style.display='block';}
-    });
+    };
+
+    if(!window.ZXingBrowser||!ZXingBrowser.BrowserMultiFormatReader){
+      const err=new Error('ZXing unavailable');
+      err.name='ScannerLibraryError';
+      throw err;
+    }
+
+    codeReader=new ZXingBrowser.BrowserMultiFormatReader();
+    if(typeof codeReader.decodeFromVideoElement==='function'){
+      await codeReader.decodeFromVideoElement(videoEl,onResult);
+      return;
+    }
+
+    if(typeof codeReader.decodeFromConstraints==='function'){
+      try{
+        if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
+        await codeReader.decodeFromConstraints({video:{facingMode:{ideal:'environment'}},audio:false},videoEl,onResult);
+      }catch(_){
+        await codeReader.decodeFromVideoDevice(null,videoEl,onResult);
+      }
+    }else{
+      if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
+      await codeReader.decodeFromVideoDevice(null,videoEl,onResult);
+    }
   }catch(e){
     stopScanner();$('scan-ph').style.display='';
-    $('scan-ph').innerHTML=`<div class="notice yellow" style="text-align:left;width:100%;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><strong>${(e&&((e.name&&e.name.includes('NotAllowed'))||(e.message&&e.message.toLowerCase().includes('permission'))))?'Permission denied.':'Camera unavailable.'}</strong><br/><button class="btn pri" onclick="resetPH()" style="margin-top:8px;">Try again</button></div></div>`;
+    $('scan-ph').innerHTML=`<div class="notice yellow" style="text-align:left;width:100%;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><strong>${scanErrMsg(e)}</strong><br/><button class="btn pri" onclick="resetPH()" style="margin-top:8px;">Try again</button></div></div>`;
   }
 }
 
 function stopScanner(){
-  scanning=false;if(codeReader){try{codeReader.reset();}catch(e){}codeReader=null;}
-  $('scan-video').classList.remove('on');$('scan-ov').classList.remove('on');
+  scanning=false;
+  if(codeReader){try{codeReader.reset();}catch(e){}codeReader=null;}
+  if(scanStream){try{scanStream.getTracks().forEach(t=>t.stop());}catch(e){}scanStream=null;}
+  const v=$('scan-video');
+  if(v.srcObject){try{v.srcObject.getTracks().forEach(t=>t.stop());}catch(e){}v.srcObject=null;}
+  v.classList.remove('on');$('scan-ov').classList.remove('on');
 }
 
 function resetPH(){
