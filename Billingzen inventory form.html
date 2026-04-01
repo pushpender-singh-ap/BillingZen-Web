@@ -367,6 +367,7 @@ const $=id=>document.getElementById(id);
 const gv=id=>$(id).value.trim();
 const sv=(id,v)=>{$(id).value=v!=null?v:''};
 let items=[],scannedCode='',codeReader=null,scanning=false,scanStream=null;
+let zxingLoadPromise=null,nativeDetector=null,nativeScanRAF=0;
 
 function switchTab(t){
   $('tab-form').style.display=t==='form'?'':'none';
@@ -506,9 +507,73 @@ function openScanModal(){
 function closeModal(){$('scan-modal').classList.remove('open');stopScanner();}
 function bdClick(e){if(e.target===$('scan-modal'))closeModal();}
 
+function loadExtScript(src){
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    const t=setTimeout(()=>{s.remove();reject(new Error('load timeout'));},3500);
+    s.src=src;s.async=true;
+    s.onload=()=>{clearTimeout(t);resolve(true);};
+    s.onerror=()=>{clearTimeout(t);reject(new Error('load failed'));};
+    document.head.appendChild(s);
+  });
+}
+
+async function ensureZXingLoaded(){
+  if(window.ZXingBrowser&&ZXingBrowser.BrowserMultiFormatReader)return true;
+  if(zxingLoadPromise)return zxingLoadPromise;
+  zxingLoadPromise=(async()=>{
+    const urls=[
+      'https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js',
+      'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js'
+    ];
+    for(const url of urls){
+      try{
+        await loadExtScript(url);
+        if(window.ZXingBrowser&&ZXingBrowser.BrowserMultiFormatReader)return true;
+      }catch(e){}
+    }
+    return false;
+  })();
+  const ok=await zxingLoadPromise;
+  if(!ok)zxingLoadPromise=null;
+  return ok;
+}
+
+async function startNativeDetector(videoEl,onText){
+  if(!('BarcodeDetector' in window))return false;
+
+  let formats=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','codabar'];
+  if(typeof BarcodeDetector.getSupportedFormats==='function'){
+    try{
+      const supported=await BarcodeDetector.getSupportedFormats();
+      const wanted=formats.filter(f=>supported.includes(f));
+      if(wanted.length)formats=wanted;
+      else if(supported.length)formats=supported;
+    }catch(e){}
+  }
+
+  nativeDetector=new BarcodeDetector({formats});
+
+  const tick=async()=>{
+    if(!scanning||!nativeDetector||!videoEl.srcObject)return;
+    try{
+      const found=await nativeDetector.detect(videoEl);
+      if(found&&found.length&&found[0].rawValue){
+        onText(found[0].rawValue);
+        return;
+      }
+    }catch(e){}
+    nativeScanRAF=requestAnimationFrame(tick);
+  };
+
+  nativeScanRAF=requestAnimationFrame(tick);
+  return true;
+}
+
 function scanErrMsg(e){
   const n=(e&&e.name?e.name:'').toLowerCase();
   if(n.includes('scannerlibraryerror'))return 'Scanner library failed to load. Refresh the page and try again.';
+  if(n.includes('nodecoderavailable'))return 'No barcode decoder available. Keep internet on, or use a browser with BarcodeDetector support.';
   if(n.includes('notallowed')||n.includes('permissiondenied'))return 'Permission denied. Allow camera access in browser settings and try again.';
   if(n.includes('notfound')||n.includes('devicesnotfound'))return 'No camera was found on this device.';
   if(n.includes('notreadable')||n.includes('trackstart'))return 'Camera is busy in another app or browser tab.';
@@ -534,33 +599,41 @@ async function startScanner(){
     await videoEl.play();
     scanning=true;
 
-    const onResult=result=>{
-      if(result){scannedCode=result.getText();stopScanner();$('scan-code').textContent=scannedCode;$('scan-result').style.display='block';}
+    const onText=txt=>{
+      scannedCode=txt;stopScanner();$('scan-code').textContent=scannedCode;$('scan-result').style.display='block';
     };
 
-    if(!window.ZXingBrowser||!ZXingBrowser.BrowserMultiFormatReader){
-      const err=new Error('ZXing unavailable');
-      err.name='ScannerLibraryError';
-      throw err;
-    }
+    // Prefer native detector first so scanning works even if CDN scripts fail on mobile networks.
+    const nativeStarted=await startNativeDetector(videoEl,onText);
+    if(nativeStarted)return;
 
-    codeReader=new ZXingBrowser.BrowserMultiFormatReader();
-    if(typeof codeReader.decodeFromVideoElement==='function'){
-      await codeReader.decodeFromVideoElement(videoEl,onResult);
+    const hasZXing=await ensureZXingLoaded();
+    if(hasZXing){
+      codeReader=new ZXingBrowser.BrowserMultiFormatReader();
+      if(typeof codeReader.decodeFromVideoElement==='function'){
+        await codeReader.decodeFromVideoElement(videoEl,result=>{if(result)onText(result.getText());});
+        return;
+      }
+
+      if(typeof codeReader.decodeFromConstraints==='function'){
+        try{
+          if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
+          await codeReader.decodeFromConstraints({video:{facingMode:{ideal:'environment'}},audio:false},videoEl,result=>{if(result)onText(result.getText());});
+          return;
+        }catch(_){
+          await codeReader.decodeFromVideoDevice(null,videoEl,result=>{if(result)onText(result.getText());});
+          return;
+        }
+      }
+
+      if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
+      await codeReader.decodeFromVideoDevice(null,videoEl,result=>{if(result)onText(result.getText());});
       return;
     }
 
-    if(typeof codeReader.decodeFromConstraints==='function'){
-      try{
-        if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
-        await codeReader.decodeFromConstraints({video:{facingMode:{ideal:'environment'}},audio:false},videoEl,onResult);
-      }catch(_){
-        await codeReader.decodeFromVideoDevice(null,videoEl,onResult);
-      }
-    }else{
-      if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
-      await codeReader.decodeFromVideoDevice(null,videoEl,onResult);
-    }
+    const err=new Error('No decoder available');
+    err.name='NoDecoderAvailable';
+    throw err;
   }catch(e){
     stopScanner();$('scan-ph').style.display='';
     $('scan-ph').innerHTML=`<div class="notice yellow" style="text-align:left;width:100%;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div><strong>${scanErrMsg(e)}</strong><br/><button class="btn pri" onclick="resetPH()" style="margin-top:8px;">Try again</button></div></div>`;
@@ -569,6 +642,8 @@ async function startScanner(){
 
 function stopScanner(){
   scanning=false;
+  if(nativeScanRAF){cancelAnimationFrame(nativeScanRAF);nativeScanRAF=0;}
+  nativeDetector=null;
   if(codeReader){try{codeReader.reset();}catch(e){}codeReader=null;}
   if(scanStream){try{scanStream.getTracks().forEach(t=>t.stop());}catch(e){}scanStream=null;}
   const v=$('scan-video');
