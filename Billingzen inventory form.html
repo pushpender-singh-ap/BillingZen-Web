@@ -4,8 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>BillingZen Inventory Form</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -523,8 +522,7 @@ async function ensureZXingLoaded(){
   if(zxingLoadPromise)return zxingLoadPromise;
   zxingLoadPromise=(async()=>{
     const urls=[
-      'https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js',
-      'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js'
+      'https://unpkg.com/@zxing/library@latest'
     ];
     for(const url of urls){
       try{
