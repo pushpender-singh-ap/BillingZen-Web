@@ -518,16 +518,17 @@ function loadExtScript(src){
 }
 
 async function ensureZXingLoaded(){
-  if(window.ZXingBrowser&&ZXingBrowser.BrowserMultiFormatReader)return true;
+  if(window.ZXing&&ZXing.BrowserMultiFormatReader)return true;
   if(zxingLoadPromise)return zxingLoadPromise;
   zxingLoadPromise=(async()=>{
     const urls=[
-      'https://unpkg.com/@zxing/library@latest'
+      'https://unpkg.com/@zxing/library@latest',
+      'https://cdn.jsdelivr.net/npm/@zxing/library@latest'
     ];
     for(const url of urls){
       try{
         await loadExtScript(url);
-        if(window.ZXingBrowser&&ZXingBrowser.BrowserMultiFormatReader)return true;
+        if(window.ZXing&&ZXing.BrowserMultiFormatReader)return true;
       }catch(e){}
     }
     return false;
@@ -601,33 +602,50 @@ async function startScanner(){
       scannedCode=txt;stopScanner();$('scan-code').textContent=scannedCode;$('scan-result').style.display='block';
     };
 
-    // Prefer native detector first so scanning works even if CDN scripts fail on mobile networks.
-    const nativeStarted=await startNativeDetector(videoEl,onText);
-    if(nativeStarted)return;
-
+    // Use the official @zxing/library browser flow first.
     const hasZXing=await ensureZXingLoaded();
     if(hasZXing){
-      codeReader=new ZXingBrowser.BrowserMultiFormatReader();
-      if(typeof codeReader.decodeFromVideoElement==='function'){
-        await codeReader.decodeFromVideoElement(videoEl,result=>{if(result)onText(result.getText());});
-        return;
-      }
+      const hints=new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.UPC_A,
+        ZXing.BarcodeFormat.UPC_E,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.ITF,
+        ZXing.BarcodeFormat.CODABAR
+      ]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+      codeReader=new ZXing.BrowserMultiFormatReader(hints,300);
 
-      if(typeof codeReader.decodeFromConstraints==='function'){
-        try{
-          if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
-          await codeReader.decodeFromConstraints({video:{facingMode:{ideal:'environment'}},audio:false},videoEl,result=>{if(result)onText(result.getText());});
-          return;
-        }catch(_){
-          await codeReader.decodeFromVideoDevice(null,videoEl,result=>{if(result)onText(result.getText());});
-          return;
+      let selectedDeviceId=null;
+      try{
+        const devices=await codeReader.getVideoInputDevices();
+        if(devices&&devices.length){
+          const back=devices.find(d=>/(back|rear|environment)/i.test((d.label||'')));
+          selectedDeviceId=(back||devices[0]).deviceId;
         }
-      }
+      }catch(e){}
 
       if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;videoEl.srcObject=null;}
-      await codeReader.decodeFromVideoDevice(null,videoEl,result=>{if(result)onText(result.getText());});
+      await codeReader.decodeFromVideoDevice(selectedDeviceId,videoEl,(result,err)=>{
+        if(result){
+          const txt=typeof result.getText==='function'?result.getText():result.text;
+          if(txt)onText(txt);
+          return;
+        }
+        const isNotFound=typeof ZXing.NotFoundException==='function'&&err instanceof ZXing.NotFoundException;
+        if(err&&!isNotFound){
+          // Keep scanning on transient decode errors from the camera stream.
+        }
+      });
       return;
     }
+
+    // Fallback when ZXing CDN is unreachable on the device.
+    const nativeStarted=await startNativeDetector(videoEl,onText);
+    if(nativeStarted)return;
 
     const err=new Error('No decoder available');
     err.name='NoDecoderAvailable';
